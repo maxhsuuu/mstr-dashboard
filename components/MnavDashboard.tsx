@@ -307,7 +307,7 @@ export function MnavDashboard() {
                     borderRadius: 14,
                     color: "#edf2ff",
                   }}
-                  formatter={(value: number) => formatNumber(value)}
+                  formatter={(value) => formatNumber(Number(value))}
                 />
                 <Line type="monotone" dataKey="value" stroke="#7cc7ff" strokeWidth={2.5} dot={false} />
               </LineChart>
