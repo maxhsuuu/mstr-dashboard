@@ -73,9 +73,11 @@ function getBtcHoldings(date: string): number {
   return holdings;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const debug = searchParams.get("debug") === "1";
+
   try {
-    // Fetch from 2024-09-01 to cover any gaps
     const startTs = Math.floor(new Date("2024-09-01").getTime() / 1000);
 
     const [btcPrices, mstrPrices] = await Promise.all([
@@ -87,11 +89,27 @@ export async function GET() {
     const liveBtc = btcPrices.get(today) ?? [...btcPrices.values()].at(-1) ?? 0;
     const liveMstr = mstrPrices.get(today) ?? [...mstrPrices.values()].at(-1) ?? 0;
 
+    // Debug mode: return stats about what we fetched
+    if (debug) {
+      const btcDates = [...btcPrices.keys()].sort();
+      const mstrDates = [...mstrPrices.keys()].sort();
+      return NextResponse.json({
+        btcRows: btcPrices.size,
+        btcFirst: btcDates[0],
+        btcLast: btcDates.at(-1),
+        mstrRows: mstrPrices.size,
+        mstrFirst: mstrDates[0],
+        mstrLast: mstrDates.at(-1),
+        today,
+        liveBtc,
+        liveMstr,
+      });
+    }
+
     const SHARES_DILUTED = 246_300_000;
     const TOTAL_DEBT = 7_270_000_000;
     const CASH = 50_000_000;
 
-    // Load sample data for dates BEFORE our Yahoo fetch range (pre-2024-09)
     let earlyRows: string[] = [];
     try {
       const csvPath = join(process.cwd(), "public", "data", "sample_mstr_mnav_dataset.csv");
@@ -99,7 +117,7 @@ export async function GET() {
       earlyRows = raw
         .trim()
         .split("\n")
-        .slice(1) // drop header
+        .slice(1)
         .filter((line) => {
           const date = line.split(",")[0]?.trim();
           return date && date < "2024-09-01";
@@ -108,7 +126,6 @@ export async function GET() {
       // non-fatal
     }
 
-    // Build rows from Yahoo data (2024-09-01 onwards)
     const allDates = new Set([...btcPrices.keys(), ...mstrPrices.keys()]);
     const yahooRows: string[] = [];
 
@@ -134,9 +151,11 @@ export async function GET() {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Cache-Control": "public, max-age=300, s-maxage=300",
+        "Cache-Control": "no-store",
         "X-Btc-Price": String(round(liveBtc, 2)),
         "X-Mstr-Price": String(round(liveMstr, 2)),
+        "X-Yahoo-Btc-Rows": String(btcPrices.size),
+        "X-Yahoo-Mstr-Rows": String(mstrPrices.size),
       },
     });
   } catch (err) {
